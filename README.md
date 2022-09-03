@@ -36,21 +36,21 @@ _Recompile binaries from the `src` folder if needed._
 
 ## Usage
 
-[chisel](https://github.com/jpillora/chisel) can be executed on both the teamserver (windows/linux) and the beacon. With either acting as the server/client. A normal execution flow would be to setup a [chisel](https://github.com/jpillora/chisel) server on the teamserver and create a client on the beacon connecting back to the teamserver.
+[chisel](https://github.com/jpillora/chisel) can be executed on both the CS teamserver client (windows/linux) and the beacon. With either acting as the server/client. A normal execution flow would be to setup a [chisel](https://github.com/jpillora/chisel) server on the CS teamserver client and create a client on the beacon connecting back to the CS teamserver client.
 
 ### Commands
 
 1. `chisel <client/server> <command>`: Run Chisel on a beacon
 
-2. `chisel-tms <client/server> <command>`: Run Chisel on your teamserver
+2. `chisel-tms <client/server> <command>`: Run Chisel on your CS teamserver client
 
 3. `chisel-enc`: XOR Encrypt `SharpChisel.exe` with a password of choice
 
-4. `chisel-jobs`: List active chisel jobs on the teamserver and beacon
+4. `chisel-jobs`: List active chisel jobs on the CS teamserver client and beacon
 
 5. `chisel-kill`: Kill active chisel jobs on a beacon
 
-6. `chisel-tms-kill`: Kill active chisel jobs on teamserver
+6. `chisel-tms-kill`: Kill active chisel jobs on your CS teamserver client
 
 ### Example
 
