@@ -257,7 +257,7 @@ alias "chisel-enc" {
     $bid = $1;
 
     # xor encrypt
-    prompt_text("Please enter a password to XOR encrypt SharpChisel.exe", "suckachick", {
+    prompt_text("Please enter a password to XOR encrypt SharpChisel.exe", "socks5oversocks4", {
         $getxorpass = $1;
         btask($bid, "XOR encrpting SharpChisel.exe with password: $getxorpass");
         $SHARPCHISELPATH = script_resource('chisel-modules/SharpChisel.exe');
